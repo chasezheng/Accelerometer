@@ -6,39 +6,112 @@
     android:layout_height="match_parent"
     tools:context="me.connectedspace.accelerometer.MainActivity">
 
+    <TextView
+        android:id="@+id/textView1"
+        android:textSize="18sp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Current Time:"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintHorizontal_bias=".1"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintVertical_bias=".1"
+        />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:text="some time"
+        app:layout_constraintLeft_toRightOf="@id/textView1"
+        app:layout_constraintTop_toTopOf="@id/textView1"
+        android:layout_marginLeft="12dp"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="18sp"
         android:id="@+id/textView2"
-        android:text="Y Value"
+        android:text="Acceleration:"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintHorizontal_bias=".1"
         app:layout_constraintTop_toBottomOf="@+id/textView1"
         android:layout_marginTop='8sp'
         />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:text="some force"
+        app:layout_constraintLeft_toRightOf="@id/textView2"
+        app:layout_constraintTop_toTopOf="@id/textView2"
+        android:layout_marginLeft="12dp"/>
 
     <TextView
-        android:id="@+id/textView1"
+        android:id="@+id/textView3"
         android:textSize="18sp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="X Value"
+        android:text="Start logging at:"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
-        android:layout_marginTop='8sp'/>
+        app:layout_constraintHorizontal_bias=".1"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintVertical_bias=".5"
+        />
+
+    <Spinner
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/hourSpinner"
+        android:layout_marginLeft="12dp"
+        app:layout_constraintStart_toEndOf="@id/textView3"
+        app:layout_constraintTop_toTopOf="@id/textView3"/>
+
+    <Spinner
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/minuteSpinner"
+        android:layout_marginLeft="18dp"
+        app:layout_constraintStart_toEndOf="@id/hourSpinner"
+        app:layout_constraintTop_toTopOf="@id/hourSpinner"/>
+    <Spinner
+        android:layout_width="60dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/microsecSpinner"
+        android:layout_marginLeft="18dp"
+        app:layout_constraintStart_toEndOf="@id/minuteSpinner"
+        app:layout_constraintTop_toTopOf="@id/minuteSpinner"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:id="@+id/textView3"
-        android:text="Z Value"
+        android:id="@+id/textView4"
+        android:textSize="18sp"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintHorizontal_bias=".1"
+        app:layout_constraintStart_toStartOf="@id/textView3"
+        app:layout_constraintTop_toBottomOf="@id/textView3"
+        android:text="*Enter past time to start service now"
+        android:layout_marginTop="12dp"
+        android:textStyle='italic'/>
+
+    <android.support.v7.widget.AppCompatButton
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/button1"
+        android:text="Schedule logging service"
         android:textSize="18sp"
         app:layout_constraintRight_toLeftOf="parent"
         app:layout_constraintLeft_toRightOf="parent"
         app:layout_constraintHorizontal_bias=".5"
-        app:layout_constraintTop_toBottomOf="@+id/textView2"
-        android:layout_marginTop='8sp'/>
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintVertical_bias=".7"
+        android:layout_marginTop="6dp"/>
 
 </android.support.constraint.ConstraintLayout>
