@@ -1,5 +1,6 @@
 package me.connectedspace.accelerometer;
 
+import android.app.PendingIntent;
 import android.app.Service;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -10,9 +11,8 @@ import android.os.IBinder;
 import android.widget.Toast;
 import android.content.Context;
 import android.content.Intent;
-import android.app.Notification;
-import android.app.NotificationManager;
 import android.support.v4.app.NotificationCompat;
+import android.app.NotificationManager;
 
 
 import java.io.File;
@@ -22,16 +22,13 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static me.connectedspace.accelerometer.R.mipmap.ic_launcher;
-
-/**
- * Created by mzhen on 3/28/2017.
- */
+import static android.support.v4.app.NotificationCompat.CATEGORY_SERVICE;
+import static android.support.v4.app.NotificationCompat.PRIORITY_MAX;
 
 public class AccelerometerLogService extends Service {
 
     private boolean mIsServiceStarted = false;
-    private Context mContext = null;
+    private Context mContext = getApplicationContext();
     private SensorManager mSensorManager = null;
     private Sensor mSensor;
     private File mLogFile = null;
@@ -41,31 +38,11 @@ public class AccelerometerLogService extends Service {
     private long mTimeStamp = 0;
     private ExecutorService mExecutor = null;
 
-    /**
-     * Default empty constructor needed by Android OS
-     */
-    public AccelerometerLogService() {
-        super();
-    }
-    /**
-     * Constructor which takes context as argument
-     *
-     * @param context
-     */
-    public AccelerometerLogService(Context context) {
-        super();
-
-        if (context != null)
-            mContext = context;
-        else
-            mContext = getBaseContext();
-    }
-
     @Override
     public void onCreate() {
         super.onCreate();
 
-        Toast.makeText(getBaseContext(), "Service onCreate", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplication(), "Service onCreate", Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -73,7 +50,7 @@ public class AccelerometerLogService extends Service {
 
         if (isServiceStarted() == false) {
 
-            mContext = getBaseContext();
+            mContext = getApplication();
             mReference = this;
             mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
             mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -179,11 +156,19 @@ public class AccelerometerLogService extends Service {
     }
 
     private void makePersistentNotification() {
+        Intent mIntent = new Intent(mContext, MainActivity.class);
+        PendingIntent mPendingIntent = PendingIntent.getActivity(mContext, 01, intent, Intent.FLAG_ACTIVITY_CLEAR_TASK);
+
         NotificationCompat.Builder mBuilder =
-                new NotificationCompat.Builder(this)
-                        .setSmallIcon(ic_launcher)
+                new NotificationCompat.Builder(getApplicationContext())
                         .setContentTitle("Accelerometer")
-                        .setContentText("Currently running.");
+                        .setContentText("Currently running.")
+                        .setContentIntent(mpendingIntent)
+                        .setPriority(PRIORITY_MAX)
+                        .setCategory(CATEGORY_SERVICE);
+        NotificationManager mNotifyMgr =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        mNotifyMgr.notify(1, mBuilder.build());
     }
 }
 
