@@ -80,11 +80,12 @@
         android:layout_marginLeft="18dp"
         app:layout_constraintStart_toEndOf="@id/hourSpinner"
         app:layout_constraintTop_toTopOf="@id/hourSpinner"/>
-    <Spinner
+    <EditText
         android:layout_width="60dp"
         android:layout_height="wrap_content"
-        android:id="@+id/microsecSpinner"
+        android:id="@+id/millisecText"
         android:layout_marginLeft="18dp"
+        android:inputType="phone"
         app:layout_constraintStart_toEndOf="@id/minuteSpinner"
         app:layout_constraintTop_toTopOf="@id/minuteSpinner"/>
 

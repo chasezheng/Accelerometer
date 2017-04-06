@@ -11,17 +11,27 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.support.v7.widget.AppCompatButton;
 import android.widget.Spinner;
+import android.view.View;
+import android.widget.ArrayAdapter;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener {
+import static android.content.Intent.FILL_IN_ACTION;
+
+public class MainActivity extends AppCompatActivity {
+
+    Context appContext = getApplicationContext();
 
     TextView currentTime = (TextView) findViewById (R.id.currentTime);
     TextView currentAccel = (TextView) findViewById (R.id.currentAccel);
-    Context mContext = getApplicationContext();
-    Intent serviceIntent = new Intent(mContext, Service.class);
-    PendingIntent servicePendingIntent = PendingIntent.getActivity(mContext, 1, serviceIntent);
+    Spinner hourSpinner = (Spinner) findViewById(R.id.hourSpinner);
+    Spinner minuteSpinner = (Spinner) findViewById(R.id.minuteSpinner);
+    EditText millisecText = (EditText) findViewById(R.id.millisecText);
+    AppCompatButton button1 = (AppCompatButton) findViewById(R.id.button1);
+
+    Intent serviceIntent = new Intent(appContext, Service.class);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,29 +39,47 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         setContentView(R.layout.activity_main);
         currentTime.setText(String.valueOf(System.currentTimeMillis()));
 
-        SensorManager sensorManager;
-        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor
-                (Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL);
+        button1.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                // Perform action on click
+            }
+        });
+
         }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-
+        // keeping running
         return true;
-        }
-    @Override
-    public void onAccuracyChanged(Sensor arg0, int arg1) {
-        // TODO Auto-generated method stub
-
-        }
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-
-        }
     }
 
 }
+
+
 
 
