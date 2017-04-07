@@ -7,6 +7,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Environment;
+import android.os.Binder;
 import android.os.IBinder;
 import android.widget.Toast;
 import android.content.Context;
@@ -25,19 +26,22 @@ import static android.content.Intent.FILL_IN_ACTION;
 import static android.support.v4.app.NotificationCompat.CATEGORY_SERVICE;
 import static android.support.v4.app.NotificationCompat.PRIORITY_MAX;
 
-class AccelerometerLogService extends Service implements SensorEventListener {
-    boolean isServiceStarted = false;
+public class AccelerometerLogService extends Service implements SensorEventListener {
+    boolean serviceStarted = false;
     Context appContext = getApplicationContext();
-
-    SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);;
+    SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
     Sensor accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
     float[] acceleration = {0f, 0f, 0f};
     long timeStamp;
-    
-    File logFile;
-    FileOutputStream fileStream;
-    //private AccelerometerLogService mReference;
-    ExecutorService executor;
+    private File logFile;
+    private FileOutputStream fileStream;
+    private ExecutorService executor;
+    class accelBinder extends Binder {
+        AccelerometerLogService getService() {
+            return AccelerometerLogService.this;
+        }
+    }
+    private IBinder binder = new accelBinder();
 
     @Override
     public void onCreate() {
@@ -48,7 +52,7 @@ class AccelerometerLogService extends Service implements SensorEventListener {
     @Override
     public int onStartCommand(Intent serviceIntent, int flags, int startId) {
 
-        if (!isServiceStarted) {
+        if (!serviceStarted) {
 
             timeStamp = System.currentTimeMillis();
             executor = Executors.newSingleThreadExecutor();
@@ -64,14 +68,69 @@ class AccelerometerLogService extends Service implements SensorEventListener {
         makePersistentNotification(servicePendingIntent);
 
         //set started to true
-        isServiceStarted = true;
+        serviceStarted = true;
 
         return Service.START_STICKY;
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        //Flush and close file stream
+        if (fileStream != null) {
+            try {
+                fileStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            try {
+                fileStream.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        Toast.makeText(appContext, "Service onDestroy", Toast.LENGTH_LONG).show();
+        serviceStarted = false;
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return binder;
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        return true;
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor arg0, int arg1) {
+        // keeping running
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+
+    }
+
+    private void makePersistentNotification(PendingIntent pendingIntent) {
+        NotificationCompat.Builder mBuilder =
+                new NotificationCompat.Builder(getApplicationContext())
+                        .setContentTitle("Accelerometer")
+                        .setContentText("Currently running.")
+                        .setContentIntent(pendingIntent)
+                        .setPriority(PRIORITY_MAX)
+                        .setCategory(CATEGORY_SERVICE);
+        NotificationManager mNotifyMgr =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        mNotifyMgr.notify(1, mBuilder.build());
+    }
+
     private void setupFolderAndFile() {
         logFile = new File(Environment.getExternalStorageDirectory().toString()
-                + "/" + AppConstants.APP_LOG_FOLDER_NAME + "/test.txt");
+                + "/" + "accelerometer" + "/test.txt");
 
         try {
             fileStream = new FileOutputStream(logFile, true);
@@ -115,55 +174,5 @@ class AccelerometerLogService extends Service implements SensorEventListener {
                 );
             }
         });
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-
-        //Flush and close file stream
-        if (fileStream != null) {
-            try {
-                fileStream.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            try {
-                fileStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        Toast.makeText(appContext, "Service onDestroy", Toast.LENGTH_LONG).show();
-        isServiceStarted = false;
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    private void makePersistentNotification(PendingIntent mPendingIntent) {
-        NotificationCompat.Builder mBuilder =
-                new NotificationCompat.Builder(getApplicationContext())
-                        .setContentTitle("Accelerometer")
-                        .setContentText("Currently running.")
-                        .setContentIntent(mPendingIntent)
-                        .setPriority(PRIORITY_MAX)
-                        .setCategory(CATEGORY_SERVICE);
-        NotificationManager mNotifyMgr =
-                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        mNotifyMgr.notify(1, mBuilder.build());
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor arg0, int arg1) {
-        // keeping running
-    }
-
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-
     }
 }
