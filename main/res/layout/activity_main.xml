@@ -24,7 +24,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="18sp"
-        android:text="some time"
         app:layout_constraintLeft_toRightOf="@id/textView1"
         app:layout_constraintTop_toTopOf="@id/textView1"
         android:layout_marginLeft="12dp"/>
@@ -39,16 +38,35 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintHorizontal_bias=".1"
         app:layout_constraintTop_toBottomOf="@+id/textView1"
-        android:layout_marginTop='8sp'
+        android:layout_marginTop='8dp'
         />
     <TextView
         android:id="@+id/currentAccel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="18sp"
-        android:text="some force"
         app:layout_constraintLeft_toRightOf="@id/textView2"
         app:layout_constraintTop_toTopOf="@id/textView2"
+        android:layout_marginLeft="12dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/textView5"
+        app:layout_constraintLeft_toLeftOf="@id/textView1"
+        app:layout_constraintTop_toBottomOf="@id/currentAccel"
+        android:text="Average Interval:"
+        android:textSize="18sp"
+        android:layout_marginTop='8dp'
+        />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/averageInterval"
+        app:layout_constraintLeft_toRightOf="@id/textView5"
+        app:layout_constraintTop_toTopOf="@id/textView5"
+        android:textSize="18sp"
         android:layout_marginLeft="12dp"/>
 
     <TextView
@@ -65,29 +83,39 @@
         app:layout_constraintVertical_bias=".5"
         />
 
-    <Spinner
-        android:layout_width="40dp"
-        android:layout_height="wrap_content"
-        android:id="@+id/hourSpinner"
-        android:layout_marginLeft="12dp"
-        app:layout_constraintStart_toEndOf="@id/textView3"
-        app:layout_constraintTop_toTopOf="@id/textView3"/>
-
-    <Spinner
-        android:layout_width="40dp"
-        android:layout_height="wrap_content"
-        android:id="@+id/minuteSpinner"
-        android:layout_marginLeft="18dp"
-        app:layout_constraintStart_toEndOf="@id/hourSpinner"
-        app:layout_constraintTop_toTopOf="@id/hourSpinner"/>
     <EditText
-        android:layout_width="60dp"
+        android:layout_width="30dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/hourText"
+        android:layout_marginLeft="12dp"
+        android:inputType="phone"
+        app:layout_constraintStart_toEndOf="@id/textView3"
+        app:layout_constraintBaseline_toBaselineOf="@id/textView3"/>
+
+    <EditText
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/minuteText"
+        android:layout_marginLeft="12dp"
+        android:inputType="phone"
+        app:layout_constraintStart_toEndOf="@id/hourText"
+        app:layout_constraintTop_toTopOf="@id/hourText"/>
+    <EditText
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:id="@+id/secText"
+        android:layout_marginLeft="12dp"
+        android:inputType="phone"
+        app:layout_constraintStart_toEndOf="@id/minuteText"
+        app:layout_constraintTop_toTopOf="@id/minuteText"/>
+    <EditText
+        android:layout_width="40dp"
         android:layout_height="wrap_content"
         android:id="@+id/millisecText"
-        android:layout_marginLeft="18dp"
+        android:layout_marginLeft="12dp"
         android:inputType="phone"
-        app:layout_constraintStart_toEndOf="@id/minuteSpinner"
-        app:layout_constraintTop_toTopOf="@id/minuteSpinner"/>
+        app:layout_constraintStart_toEndOf="@id/secText"
+        app:layout_constraintBottom_toBottomOf="@id/secText"/>
 
     <TextView
         android:layout_width="wrap_content"
@@ -107,7 +135,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:id="@+id/button1"
-        android:text="Schedule logging service"
+        android:text="Schedule logging"
         android:textSize="18sp"
         app:layout_constraintRight_toLeftOf="parent"
         app:layout_constraintLeft_toRightOf="parent"
