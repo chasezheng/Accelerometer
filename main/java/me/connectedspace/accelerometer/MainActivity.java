@@ -1,5 +1,6 @@
 package me.connectedspace.accelerometer;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -7,41 +8,32 @@ import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.AppCompatButton;
-import android.view.View;
 import android.util.Log;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.support.v7.widget.SwitchCompat;
 
 import me.connectedspace.accelerometer.AccelerometerLogService.accelBinder;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
-import java.util.Calendar;
 
-public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
+public class MainActivity extends AppCompatActivity {
     SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
     Context appContext;
-    private boolean serviceBound = false;
+    private boolean serviceBound;
     private AccelerometerLogService loggingService;
     private Intent bindIntent;
-    private TextView currentTime;
-    private TextView currentAccel;
-    private TextView averageInter;
-    private EditText hourText;
-    private EditText minuteText;
-    private EditText secText;
-    private EditText millisecText;
-    private AppCompatButton button1;
+    private TextView currentTime, currentAccel, averageInter;
+    private EditText hourText, minuteText, secText, millisecText, interval;
+    private SwitchCompat switch1;
     private Handler handler;
-    private Calendar calendar = Calendar.getInstance();
-
     private Runnable viewUpdate;
+    Calendar serviceCalendar;
 
     private static final String TAG = "MainActivity";
 
@@ -58,14 +50,49 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         minuteText = (EditText) findViewById(R.id.minuteText);
         secText = (EditText) findViewById(R.id.secText);
         millisecText = (EditText) findViewById(R.id.millisecText);
-        button1 = (AppCompatButton) findViewById(R.id.button1);
+        interval = (EditText) findViewById(R.id.interval);
+        switch1 = (SwitchCompat) findViewById(R.id.switch1);
         handler = new Handler(getMainLooper());
 
-        button1.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                //invoking service method
+        ActivityCompat.requestPermissions(MainActivity.this,
+                new String[] {
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                },
+                100);
+
+        viewUpdate = new Runnable() {
+            @Override
+            public void run() {
+                currentTime.setText(dateFormatter.format(new Date(System.currentTimeMillis())));
+                if (serviceBound) {
+                    currentAccel.setText(String.valueOf(average(loggingService.pastX))
+                            + "\n" + String.valueOf(average(loggingService.pastY))
+                            + "\n" + String.valueOf(average(loggingService.pastZ)));
+                    averageInter.setText(String.valueOf(average(loggingService.pastFreq)));
+                    handler.postDelayed(this, 100);
+                } else {
+                    currentAccel.setText("Service not started.");
+                }
             }
-        });
+        };
+
+        switch1.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        if (serviceBound) {
+                            if (isChecked && !serviceCalendar.isSet(Calendar.MILLISECOND)) {
+                                loggingService.setSchedule(Integer.parseInt(hourText.getText().toString()),
+                                        Integer.parseInt(minuteText.getText().toString()),
+                                        Integer.parseInt(secText.getText().toString()),
+                                        Integer.parseInt(millisecText.getText().toString()),
+                                        Integer.parseInt(interval.getText().toString()));
+                            } else if (!isChecked && serviceCalendar.isSet(Calendar.MILLISECOND)) {
+                                loggingService.cancelLogging();
+                            }
+                        }
+                    }
+                }
+        );
     }
 
     @Override
@@ -75,19 +102,24 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         //create logging service
         bindIntent = new Intent(this, AccelerometerLogService.class);
         startService(bindIntent);
-        if (!bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)) {
-            Log.v(TAG, "service not started");
-        }
+        bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         Log.v(TAG, "onResume");
-        hourText.setText(String.valueOf(calendar.get(Calendar.HOUR_OF_DAY)), TextView.BufferType.EDITABLE);
-        minuteText.setText(String.valueOf(calendar.get(Calendar.MINUTE)), TextView.BufferType.EDITABLE);
-        secText.setText(String.valueOf(calendar.get(Calendar.SECOND)), TextView.BufferType.EDITABLE);
-        millisecText.setText(String.valueOf(0), TextView.BufferType.EDITABLE);
+
+        //Update view
+        Calendar calendar = Calendar.getInstance();
+        if (!serviceBound || !serviceCalendar.isSet(Calendar.MILLISECOND)) {
+            hourText.setText(String.valueOf(calendar.get(Calendar.HOUR_OF_DAY)), TextView.BufferType.EDITABLE);
+            minuteText.setText(String.valueOf(calendar.get(Calendar.MINUTE)), TextView.BufferType.EDITABLE);
+            secText.setText(String.valueOf(calendar.get(Calendar.SECOND)), TextView.BufferType.EDITABLE);
+            millisecText.setText(String.valueOf(0), TextView.BufferType.EDITABLE);
+            interval.setText(String.valueOf(0), TextView.BufferType.EDITABLE);
+        }
+
         handler.postDelayed(viewUpdate, 10);
     }
 
@@ -111,14 +143,11 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     @Override
     protected void onRestart() {
         super.onRestart();
-        Log.v(TAG, "beginning onRestart");
-        if (!loggingService.serviceStarted()) {
+        Log.v(TAG, "onRestart");
+        if (!serviceBound) {
             startService(bindIntent);
             bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-        } else if (!serviceBound) {
-            bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
         }
-        Log.v(TAG, "finishing onRestart");
     }
 
     @Override
@@ -131,7 +160,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     private ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            Log.v(TAG, "serviceDisconnected");
             serviceBound = false;
+            loggingService = null;
             handler.removeCallbacks(viewUpdate);
         }
         @Override
@@ -141,32 +172,21 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             loggingService = binder.getService();
             serviceBound = true;
 
+            //One-time view update
+            serviceCalendar = loggingService.calendar;
+            if (serviceCalendar.isSet(Calendar.MILLISECOND)) {
+                hourText.setText(String.valueOf(serviceCalendar.get(Calendar.HOUR_OF_DAY)), TextView.BufferType.EDITABLE);
+                minuteText.setText(String.valueOf(serviceCalendar.get(Calendar.MINUTE)), TextView.BufferType.EDITABLE);
+                secText.setText(String.valueOf(serviceCalendar.get(Calendar.SECOND)), TextView.BufferType.EDITABLE);
+                millisecText.setText(String.valueOf(serviceCalendar.get(Calendar.MILLISECOND)), TextView.BufferType.EDITABLE);
+                interval.setText(String.valueOf(loggingService.getSampleInterval()));
+            }
+
+            //Repeated view update
             handler.removeCallbacks(viewUpdate);
-            viewUpdate = new Runnable() {
-                @Override
-                public void run() {
-                    currentTime.setText(dateFormatter.format(new Date(System.currentTimeMillis())));
-                    currentAccel.setText(String.valueOf(average(loggingService.pastX))
-                            + "\n" + String.valueOf(average(loggingService.pastY))
-                            + "\n" + String.valueOf(average(loggingService.pastZ)));
-                    averageInter.setText(String.valueOf(average(loggingService.pastFreq)));
-                    handler.postDelayed(this, 100);
-                }
-            };
             handler.postDelayed(viewUpdate, 10);
         }
     };
-
-    @Override
-    public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-        // An item was selected. You can retrieve the selected item using
-        // parent.getItemAtPosition(pos)
-    }
-
-    @Override
-    public void onNothingSelected(AdapterView<?> parent) {
-        // Another interface callback
-    }
 
     private long average (long[] array) {
         long sum = 0;
@@ -174,6 +194,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
         return sum/array.length;
     }
+
     private float average (float[] array) {
         float sum = 0;
         for(float num : array) {sum = sum + num;}
