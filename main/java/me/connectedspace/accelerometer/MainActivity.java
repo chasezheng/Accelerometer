@@ -5,6 +5,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -15,12 +18,16 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.support.v7.widget.SwitchCompat;
+import android.widget.Toast;
 
 import me.connectedspace.accelerometer.AccelerometerLogService.accelBinder;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
+
+import static android.hardware.SensorManager.SENSOR_DELAY_FASTEST;
+import static android.os.SystemClock.uptimeMillis;
 
 public class MainActivity extends AppCompatActivity {
     SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
@@ -29,12 +36,8 @@ public class MainActivity extends AppCompatActivity {
     private AccelerometerLogService loggingService;
     private Intent bindIntent;
     private TextView currentTime, currentAccel, averageInter;
-    private EditText hourText, minuteText, secText, millisecText, interval;
-    private SwitchCompat switch1;
-    private Handler handler;
-    private Runnable viewUpdate;
-    Calendar serviceCalendar;
-
+    private EditText hourText, minuteText, secText, millisecText, intervalText;
+    private ViewUpdater viewUpdater;
     private static final String TAG = "MainActivity";
 
     @Override
@@ -42,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         Log.v(TAG, "onCreate");
         appContext = getApplicationContext();
+        viewUpdater = new ViewUpdater();
         setContentView(R.layout.activity_main);
         currentTime = (TextView) findViewById (R.id.currentTime);
         currentAccel = (TextView) findViewById (R.id.currentAccel);
@@ -50,44 +54,28 @@ public class MainActivity extends AppCompatActivity {
         minuteText = (EditText) findViewById(R.id.minuteText);
         secText = (EditText) findViewById(R.id.secText);
         millisecText = (EditText) findViewById(R.id.millisecText);
-        interval = (EditText) findViewById(R.id.interval);
-        switch1 = (SwitchCompat) findViewById(R.id.switch1);
-        handler = new Handler(getMainLooper());
+        intervalText = (EditText) findViewById(R.id.interval);
+        SwitchCompat switch1 = (SwitchCompat) findViewById(R.id.switch1);
 
         ActivityCompat.requestPermissions(MainActivity.this,
-                new String[] {
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                },
+                new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                            Manifest.permission.BODY_SENSORS,
+                            Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WAKE_LOCK,},
                 100);
-
-        viewUpdate = new Runnable() {
-            @Override
-            public void run() {
-                currentTime.setText(dateFormatter.format(new Date(System.currentTimeMillis())));
-                if (serviceBound) {
-                    currentAccel.setText(String.valueOf(average(loggingService.pastX))
-                            + "\n" + String.valueOf(average(loggingService.pastY))
-                            + "\n" + String.valueOf(average(loggingService.pastZ)));
-                    averageInter.setText(String.valueOf(average(loggingService.pastFreq)));
-                    handler.postDelayed(this, 100);
-                } else {
-                    currentAccel.setText("Service not started.");
-                }
-            }
-        };
 
         switch1.setOnCheckedChangeListener(
                 new CompoundButton.OnCheckedChangeListener() {
                     public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                         if (serviceBound) {
-                            if (isChecked && !serviceCalendar.isSet(Calendar.MILLISECOND)) {
-                                loggingService.setSchedule(Integer.parseInt(hourText.getText().toString()),
+                            if (isChecked && !loggingService.configuration.scheduled()) {
+                                loggingService.configuration.set(Integer.parseInt(hourText.getText().toString()),
                                         Integer.parseInt(minuteText.getText().toString()),
                                         Integer.parseInt(secText.getText().toString()),
                                         Integer.parseInt(millisecText.getText().toString()),
-                                        Integer.parseInt(interval.getText().toString()));
-                            } else if (!isChecked && serviceCalendar.isSet(Calendar.MILLISECOND)) {
-                                loggingService.cancelLogging();
+                                        Integer.parseInt(intervalText.getText().toString()));
+                            } else if (!isChecked && loggingService.configuration.scheduled()) {
+                                loggingService.configuration.clear();
                             }
                         }
                     }
@@ -102,32 +90,22 @@ public class MainActivity extends AppCompatActivity {
         //create logging service
         bindIntent = new Intent(this, AccelerometerLogService.class);
         startService(bindIntent);
-        bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+        bindService(bindIntent, serviceConnection, Context.BIND_DEBUG_UNBIND);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         Log.v(TAG, "onResume");
+        viewUpdater.run();
 
-        //Update view
-        Calendar calendar = Calendar.getInstance();
-        if (!serviceBound || !serviceCalendar.isSet(Calendar.MILLISECOND)) {
-            hourText.setText(String.valueOf(calendar.get(Calendar.HOUR_OF_DAY)), TextView.BufferType.EDITABLE);
-            minuteText.setText(String.valueOf(calendar.get(Calendar.MINUTE)), TextView.BufferType.EDITABLE);
-            secText.setText(String.valueOf(calendar.get(Calendar.SECOND)), TextView.BufferType.EDITABLE);
-            millisecText.setText(String.valueOf(0), TextView.BufferType.EDITABLE);
-            interval.setText(String.valueOf(0), TextView.BufferType.EDITABLE);
-        }
-
-        handler.postDelayed(viewUpdate, 10);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         Log.v(TAG, "onPause");
-        handler.removeCallbacks(viewUpdate);
+        viewUpdater.stop();
     }
 
     @Override
@@ -146,14 +124,13 @@ public class MainActivity extends AppCompatActivity {
         Log.v(TAG, "onRestart");
         if (!serviceBound) {
             startService(bindIntent);
-            bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+            bindService(bindIntent, serviceConnection, Context.BIND_DEBUG_UNBIND);
         }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        handler = null;
         Log.v(TAG, "onDestroy");
     }
 
@@ -162,8 +139,8 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceDisconnected(ComponentName name) {
             Log.v(TAG, "serviceDisconnected");
             serviceBound = false;
+            viewUpdater.stop();
             loggingService = null;
-            handler.removeCallbacks(viewUpdate);
         }
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -171,35 +148,104 @@ public class MainActivity extends AppCompatActivity {
             accelBinder binder = (accelBinder) service;
             loggingService = binder.getService();
             serviceBound = true;
-
-            //One-time view update
-            serviceCalendar = loggingService.calendar;
-            if (serviceCalendar.isSet(Calendar.MILLISECOND)) {
-                hourText.setText(String.valueOf(serviceCalendar.get(Calendar.HOUR_OF_DAY)), TextView.BufferType.EDITABLE);
-                minuteText.setText(String.valueOf(serviceCalendar.get(Calendar.MINUTE)), TextView.BufferType.EDITABLE);
-                secText.setText(String.valueOf(serviceCalendar.get(Calendar.SECOND)), TextView.BufferType.EDITABLE);
-                millisecText.setText(String.valueOf(serviceCalendar.get(Calendar.MILLISECOND)), TextView.BufferType.EDITABLE);
-                interval.setText(String.valueOf(loggingService.getSampleInterval()));
-            }
-
-            //Repeated view update
-            handler.removeCallbacks(viewUpdate);
-            handler.postDelayed(viewUpdate, 10);
+            viewUpdater.run();
         }
     };
 
-    private long average (long[] array) {
-        long sum = 0;
-        for(long num : array) {sum = sum + num;}
+    private final class ViewUpdater implements SensorEventListener {
+        private Handler handler;
+        private Runnable runnable;
+        private float[] pastX = new float[100];
+        private float[] pastY = new float[100];
+        private float[] pastZ = new float[100];
+        private long[] pastFreq = new long[100];
+        private int index;
+        private long previousTime;
+        private int hour, minute, second, milli, interval;
 
-        return sum/array.length;
-    }
+        private ViewUpdater() {
+            interval =  SENSOR_DELAY_FASTEST;
+            handler = new Handler(getMainLooper());
+            runnable = new Runnable() {
+                @Override
+                public void run() {
+                    currentTime.setText(dateFormatter.format(new Date(System.currentTimeMillis())));
+                    if (serviceBound) {
+                        currentAccel.setText(String.valueOf(average(pastX))
+                                + "\n" + String.valueOf(average(pastY))
+                                + "\n" + String.valueOf(average(pastZ)));
+                        averageInter.setText(String.valueOf(average(pastFreq)));
+                        handler.postDelayed(this, 100);
+                    } else {
+                        currentAccel.setText("Service not started.");
+                    }
+                }
+            };
+        }
 
-    private float average (float[] array) {
-        float sum = 0;
-        for(float num : array) {sum = sum + num;}
+        private void run() {
+            this.stop();
+            if (!serviceBound || !loggingService.configuration.scheduled()) {
+                Calendar calendar = Calendar.getInstance();
+                hour = calendar.get(Calendar.HOUR_OF_DAY);
+                minute = calendar.get(Calendar.MINUTE);
+                second = calendar.get(Calendar.SECOND);
+            } else {
+                hour = loggingService.configuration.get()[0];
+                minute = loggingService.configuration.get()[1];
+                second = loggingService.configuration.get()[2];
+                milli = loggingService.configuration.get()[3];
+                interval = loggingService.configuration.get()[4];
+            }
+            hourText.setText(String.valueOf(hour));
+            minuteText.setText(String.valueOf(minute));
+            secText.setText(String.valueOf(second));
+            millisecText.setText(String.valueOf(milli));
+            intervalText.setText(String.valueOf(interval));
 
-        return sum/array.length;
+            //Register listener and display sensor value
+            if (serviceBound) {
+                loggingService.sensorManager.registerListener(this,
+                        loggingService.accelerometer, interval*1000);
+                handler.postDelayed(runnable, 10);
+                previousTime = uptimeMillis();
+            }
+        }
+
+        private void stop() {
+            handler.removeCallbacks(runnable);
+            if (serviceBound) {loggingService.sensorManager.unregisterListener(this);}
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor arg0, int arg1) {Log.v(TAG, "onAccuracyChanged");
+            Toast.makeText(MainActivity.this, "Accuracy changed to " + String.valueOf(arg1), Toast.LENGTH_LONG).show();}
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            long currentTime = uptimeMillis();
+            pastX[index]=event.values[0];
+            pastY[index]=event.values[1];
+            pastZ[index]=event.values[2];
+            pastFreq[index]= currentTime - previousTime;
+
+            index = (index+1)%100;
+            previousTime=currentTime;
+        }
+
+        private long average (long[] array) {
+            long sum = 0;
+            for(long num : array) {sum = sum + num;}
+
+            return sum/array.length;
+        }
+
+        private float average (float[] array) {
+            float sum = 0;
+            for(float num : array) {sum = sum + num;}
+
+            return sum/array.length;
+        }
     }
 }
 
