@@ -30,13 +30,13 @@ import static android.hardware.SensorManager.SENSOR_DELAY_FASTEST;
 import static android.os.SystemClock.uptimeMillis;
 
 public class MainActivity extends AppCompatActivity {
-    SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
     Context appContext;
     private boolean serviceBound;
     private AccelerometerLogService loggingService;
     private Intent bindIntent;
     private TextView currentTime, currentAccel, averageInter;
     private EditText hourText, minuteText, secText, millisecText, intervalText;
+    SwitchCompat switch1;
     private ViewUpdater viewUpdater;
     private static final String TAG = "MainActivity";
 
@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
         secText = (EditText) findViewById(R.id.secText);
         millisecText = (EditText) findViewById(R.id.millisecText);
         intervalText = (EditText) findViewById(R.id.interval);
-        SwitchCompat switch1 = (SwitchCompat) findViewById(R.id.switch1);
+        switch1 = (SwitchCompat) findViewById(R.id.switch1);
 
         ActivityCompat.requestPermissions(MainActivity.this,
                 new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE,
@@ -74,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
                                         Integer.parseInt(secText.getText().toString()),
                                         Integer.parseInt(millisecText.getText().toString()),
                                         Integer.parseInt(intervalText.getText().toString()));
+                                viewUpdater.run();
                             } else if (!isChecked && loggingService.configuration.scheduled()) {
                                 loggingService.configuration.clear();
                             }
@@ -162,6 +163,7 @@ public class MainActivity extends AppCompatActivity {
         private int index;
         private long previousTime;
         private int hour, minute, second, milli, interval;
+        private SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
 
         private ViewUpdater() {
             interval =  SENSOR_DELAY_FASTEST;
@@ -175,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
                                 + "\n" + String.valueOf(average(pastY))
                                 + "\n" + String.valueOf(average(pastZ)));
                         averageInter.setText(String.valueOf(average(pastFreq)));
-                        handler.postDelayed(this, 100);
+                        handler.postDelayed(this, 200);
                     } else {
                         currentAccel.setText("Service not started.");
                     }
@@ -196,6 +198,7 @@ public class MainActivity extends AppCompatActivity {
                 second = loggingService.configuration.get()[2];
                 milli = loggingService.configuration.get()[3];
                 interval = loggingService.configuration.get()[4];
+                switch1.setChecked(true);
             }
             hourText.setText(String.valueOf(hour));
             minuteText.setText(String.valueOf(minute));
@@ -205,6 +208,7 @@ public class MainActivity extends AppCompatActivity {
 
             //Register listener and display sensor value
             if (serviceBound) {
+                loggingService.sensorManager.unregisterListener(this);
                 loggingService.sensorManager.registerListener(this,
                         loggingService.accelerometer, interval*1000);
                 handler.postDelayed(runnable, 10);
