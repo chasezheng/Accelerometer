@@ -28,15 +28,33 @@ import java.util.Locale;
 
 import static android.hardware.SensorManager.SENSOR_DELAY_FASTEST;
 import static android.os.SystemClock.uptimeMillis;
+import static java.lang.System.currentTimeMillis;
 
 public class MainActivity extends AppCompatActivity {
     Context appContext;
     private boolean serviceBound;
     private AccelerometerLogService loggingService;
+    private ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.v(TAG, "serviceDisconnected");
+            serviceBound = false;
+            viewUpdater.stop();
+            loggingService = null;
+        }
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.v(TAG, "service connected");
+            accelBinder binder = (accelBinder) service;
+            loggingService = binder.getService();
+            serviceBound = true;
+            viewUpdater.run();
+        }
+    };
     private Intent bindIntent;
     private TextView currentTime, currentAccel, averageInter;
     private EditText hourText, minuteText, secText, millisecText, intervalText;
-    SwitchCompat switch1;
+    private SwitchCompat switch1;
     private ViewUpdater viewUpdater;
     private static final String TAG = "MainActivity";
 
@@ -135,24 +153,6 @@ public class MainActivity extends AppCompatActivity {
         Log.v(TAG, "onDestroy");
     }
 
-    private ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            Log.v(TAG, "serviceDisconnected");
-            serviceBound = false;
-            viewUpdater.stop();
-            loggingService = null;
-        }
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.v(TAG, "service connected");
-            accelBinder binder = (accelBinder) service;
-            loggingService = binder.getService();
-            serviceBound = true;
-            viewUpdater.run();
-        }
-    };
-
     private final class ViewUpdater implements SensorEventListener {
         private Handler handler;
         private Runnable runnable;
@@ -162,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
         private long[] pastFreq = new long[100];
         private int index;
         private long previousTime;
-        private int hour, minute, second, milli, interval;
+        private int hour, minute, second, milli, interval; //the numbers displayed on UI
         private SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
 
         private ViewUpdater() {
@@ -171,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
             runnable = new Runnable() {
                 @Override
                 public void run() {
-                    currentTime.setText(dateFormatter.format(new Date(System.currentTimeMillis())));
+                    currentTime.setText(dateFormatter.format(new Date(currentTimeMillis())));
                     if (serviceBound) {
                         currentAccel.setText(String.valueOf(average(pastX))
                                 + "\n" + String.valueOf(average(pastY))
@@ -209,10 +209,10 @@ public class MainActivity extends AppCompatActivity {
             //Register listener and display sensor value
             if (serviceBound) {
                 loggingService.sensorManager.unregisterListener(this);
+                previousTime = uptimeMillis();
                 loggingService.sensorManager.registerListener(this,
                         loggingService.accelerometer, interval*1000);
                 handler.postDelayed(runnable, 10);
-                previousTime = uptimeMillis();
             }
         }
 
@@ -222,8 +222,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onAccuracyChanged(Sensor arg0, int arg1) {Log.v(TAG, "onAccuracyChanged");
-            Toast.makeText(MainActivity.this, "Accuracy changed to " + String.valueOf(arg1), Toast.LENGTH_LONG).show();}
+        public void onAccuracyChanged(Sensor arg0, int arg1) {
+            if (arg1 != 3) {
+                Toast.makeText(MainActivity.this,
+                        "Accuracy changed to " + String.valueOf(arg1), Toast.LENGTH_SHORT).show();
+            }
+        }
 
         @Override
         public void onSensorChanged(SensorEvent event) {
@@ -237,11 +241,11 @@ public class MainActivity extends AppCompatActivity {
             previousTime=currentTime;
         }
 
-        private long average (long[] array) {
+        private float average (long[] array) {
             long sum = 0;
             for(long num : array) {sum = sum + num;}
 
-            return sum/array.length;
+            return ((float) sum)/array.length;
         }
 
         private float average (float[] array) {

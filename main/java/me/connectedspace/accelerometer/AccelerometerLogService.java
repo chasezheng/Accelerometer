@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
-import android.widget.Toast;
 import android.content.Context;
 import android.content.Intent;
 import android.support.v4.app.NotificationCompat;
@@ -27,6 +26,8 @@ import java.util.Date;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 
+import static android.os.SystemClock.elapsedRealtime;
+import static android.os.SystemClock.sleep;
 import static android.os.SystemClock.uptimeMillis;
 import static android.support.v4.app.NotificationCompat.CATEGORY_SERVICE;
 import static android.support.v4.app.NotificationCompat.PRIORITY_MAX;
@@ -41,14 +42,9 @@ public class AccelerometerLogService extends Service {
     private NotificationManager nManager;
     private PowerManager powerManager;
     private PowerManager.WakeLock wakeLock;
-    private Logger logger;
-    private LoggingSession loggingSession = null;
     private File dir;
-    Configuration configuration;
-
     private static final String TAG = "serviceLog";
 
-    //service life cycle
     @Override
     public void onCreate() {
         super.onCreate();
@@ -66,7 +62,6 @@ public class AccelerometerLogService extends Service {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         Log.v(TAG, "onCreate");
-        Toast.makeText(appContext, "Service created", Toast.LENGTH_SHORT).show();
         configuration.clear();
     }
 
@@ -80,24 +75,27 @@ public class AccelerometerLogService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.v(TAG, "onDestroy");
-        if (loggingSession != null) {loggingSession.close();}
+        configuration.clear();
     }
 
-    //setup binding behaviors
+    //binding behaviors
+    private final IBinder binder = new accelBinder();
+
     class accelBinder extends Binder {
         AccelerometerLogService getService() {return AccelerometerLogService.this;}
     }
-    private final IBinder binder = new accelBinder();
 
     @Override
     public IBinder onBind(Intent intent) {
         Log.v(TAG, "onBind");
+        configuration.checkIfSlept();
         return binder;
     }
 
     @Override
     public void onRebind(Intent intent) {
         Log.v(TAG, "onRebind");
+        configuration.checkIfSlept();
     }
 
     @Override
@@ -109,11 +107,17 @@ public class AccelerometerLogService extends Service {
         return true;
     }
 
+    //logging behaviors
+    Configuration configuration;
+    private Logger logger;
+    private LoggingSession loggingSession = null;
 
     final class Configuration {
         private Calendar calendar;
         private SimpleDateFormat fileTimeFormat;
         private SimpleDateFormat fileNameFormat;
+        private long sleepTime; //updated by checkIfSlept
+        private long bootTime;
         private int interval;
         private boolean scheduled;
 
@@ -121,9 +125,12 @@ public class AccelerometerLogService extends Service {
             calendar = Calendar.getInstance();
             fileTimeFormat = new SimpleDateFormat("E MMM dd HH:mm:ss.S zzz yyyy", Locale.US);
             fileNameFormat = new SimpleDateFormat("MMM-dd HH-mm ss.S", Locale.US);
+            bootTime = (currentTimeMillis() - elapsedRealtime()
+                    - elapsedRealtime() + currentTimeMillis()) / 2; //There can be a delay between calling one time and then the other.
         }
 
         void clear() {
+            checkIfSlept();
             scheduled = false;
             calendar.clear(Calendar.HOUR_OF_DAY);
             calendar.clear(Calendar.MINUTE);
@@ -131,29 +138,38 @@ public class AccelerometerLogService extends Service {
             calendar.clear(Calendar.MILLISECOND);
             if (loggingSession != null) {
                 loggingSession.close();
+                loggingSession = null;
             }
-            nManager.cancelAll();
+            nManager.cancel(1);
             if (wakeLock.isHeld()) {wakeLock.release();}
         }
 
         void set(int hour, int minute, int second, int milli, int inter) {
             Log.v(TAG, "configuration set");
             wakeLock.acquire();
+            scheduled = true;
             calendar.set(Calendar.HOUR_OF_DAY, hour);
             calendar.set(Calendar.MINUTE, minute);
             calendar.set(Calendar.SECOND, second);
             calendar.set(Calendar.MILLISECOND, milli);
+            calendar.setTimeInMillis(max(currentTimeMillis(), configuration.getTimeInMillis()));
             interval = inter;
-            scheduled = true;
-            loggingSession = new LoggingSession();
+            loggingSession = new LoggingSession(configuration.getTimeInMillis());
+            makeNotification(true, "Currently running.");
+            sleepTime = (elapsedRealtime() - uptimeMillis()
+                    - uptimeMillis() + elapsedRealtime()) / 2;
         }
 
         void set(long time, int inter) {
             wakeLock.acquire();
+            scheduled = true;
             calendar.setTimeInMillis(time);
             interval = inter;
-            scheduled = true;
-            loggingSession = new LoggingSession();
+            calendar.setTimeInMillis(max(currentTimeMillis(), configuration.getTimeInMillis()));
+            loggingSession = new LoggingSession(configuration.getTimeInMillis());
+            makeNotification(true, "Currently running.");
+            sleepTime = (elapsedRealtime() - uptimeMillis()
+                    - uptimeMillis() + elapsedRealtime()) / 2;
         }
 
         int[] get() {
@@ -164,6 +180,8 @@ public class AccelerometerLogService extends Service {
                     calendar.get(Calendar.SECOND), calendar.get(Calendar.MILLISECOND), interval};
         }
 
+        private int get(int field) {return calendar.get(field);}
+
         boolean scheduled() {return scheduled;}
 
         long getTimeInMillis() {
@@ -173,8 +191,42 @@ public class AccelerometerLogService extends Service {
             return calendar.getTimeInMillis();
         }
 
-        private void setTimeInMillis(long time) {
-            calendar.setTimeInMillis(time);
+        private void checkIfSlept() {
+            long newSleepTime = (elapsedRealtime() - uptimeMillis()
+                    - uptimeMillis() + elapsedRealtime()) / 2;
+            long delta = newSleepTime - sleepTime;
+            Log.v(TAG, "checkIfSlept " + String.valueOf(delta));
+            configuration.sleepTime = newSleepTime;
+            if (scheduled && delta > 0) {
+                String logMsg = "#Device slept for " + String.valueOf(delta)
+                        + "ms. Is battery optimization turned off for the app?";
+                makeNotification(false, logMsg);
+            }
+
+        }
+
+        private void makeNotification(boolean onGoing, String text) {
+            Log.v(TAG, "makeNotification");
+            Intent intent = new Intent(appContext, MainActivity.class)
+                    .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent pendingIntent = PendingIntent.getActivity(appContext, 0,
+                    intent, 0);
+            NotificationCompat.Builder builder =
+                    new NotificationCompat.Builder(getApplicationContext())
+                            .setContentTitle("Accelerometer")
+                            .setContentText(text)
+                            .setContentIntent(pendingIntent)
+                            .setPriority(PRIORITY_MAX)
+                            .setSmallIcon(R.drawable.notification)
+                            .setCategory(CATEGORY_SERVICE)
+                            .setOngoing(onGoing)
+                            .setAutoCancel(!onGoing)
+                            .setWhen(configuration.getTimeInMillis());
+            nManager.notify(onGoing ? 1 : 0, builder.build());
+        }
+
+        public long timeToElapsedTime(long time) {
+            return time - bootTime;
         }
     }
 
@@ -182,13 +234,11 @@ public class AccelerometerLogService extends Service {
         private File logFile;
         private FileOutputStream fileStream;
 
-        private LoggingSession() {
-            long timeDiff = currentTimeMillis() - uptimeMillis();
-
+        private LoggingSession(long scheduledTime) {
+            //scheduledTime is in milliseconds since the epoch
             //setup file
-            long time = max(currentTimeMillis(), configuration.getTimeInMillis());
-            logger.startTime = time - timeDiff;
-            logFile = new File(dir, configuration.fileNameFormat.format(new Date(time)) + ".txt");
+            Date date = new Date(scheduledTime);
+            logFile = new File(dir, configuration.fileNameFormat.format(date) + ".txt");
             boolean fileCreated = false;
             try {fileCreated = logFile.createNewFile();}
             catch (IOException e) {e.printStackTrace();}
@@ -197,86 +247,61 @@ public class AccelerometerLogService extends Service {
                 catch (FileNotFoundException e) {e.printStackTrace();}
             }
             // add header to file
-            String header = "# Started @" + configuration.fileTimeFormat.format(new Date(time)) + "\n";
+            String header = "# Started @" + configuration.fileTimeFormat.format(date) + "\n";
             try {
                 fileStream.write(header.getBytes());
-                logger.fileStream = fileStream;
             } catch (IOException e) {
                 e.printStackTrace();
             }
             //Schedule logging
+            logger.startTime = configuration.timeToElapsedTime(scheduledTime);
             handler.postAtTime(new Runnable() {
                 @Override
                 public void run() {
                     sensorManager.registerListener(logger, accelerometer, configuration.interval*1000);
                 }
-            }, time - timeDiff);
+            }, scheduledTime - configuration.bootTime - configuration.sleepTime);
 
             Log.v(TAG, "Start logging session");
-            makeNotification();
-            configuration.setTimeInMillis(time);
-        }
-
-        private void makeNotification() {
-            Log.v(TAG, "makePersistentNotification");
-            Intent intent = new Intent(appContext, MainActivity.class)
-                    .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            PendingIntent pendingIntent = PendingIntent.getActivity(appContext, 0,
-                    intent, 0);
-            NotificationCompat.Builder builder =
-                    new NotificationCompat.Builder(getApplicationContext())
-                            .setContentTitle("Accelerometer")
-                            .setContentText("Currently running.")
-                            .setContentIntent(pendingIntent)
-                            .setPriority(PRIORITY_MAX)
-                            .setSmallIcon(R.drawable.notification)
-                            .setCategory(CATEGORY_SERVICE)
-                            .setOngoing(true)
-                            .setAutoCancel(false)
-                            .setWhen(configuration.getTimeInMillis());
-            nManager.notify(1, builder.build());
         }
 
         private void close() {
             sensorManager.unregisterListener(logger);
-            //Flush and close file stream
+            //Close the file stream
+            long time = currentTimeMillis();
             if (fileStream != null) {
                 try {
                     String footer = "# Completed @"
-                            + configuration.fileTimeFormat.format(new Date(currentTimeMillis()));
+                            + configuration.fileTimeFormat.format(new Date(time));
                     fileStream.write(footer.getBytes());
                     fileStream.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
-            if (uptimeMillis() <= logger.startTime) {logFile.delete();}
-            logger.fileStream = null;
-            loggingSession = null;
+            if (elapsedRealtime() <= logger.startTime) {logFile.delete();}
         }
-    } //Logging sessions are instantiated as a result of setting configurations.
+    } //Logging sessions are instantiated by setting configurations.
 
     private class Logger implements SensorEventListener {
-        private FileOutputStream fileStream;
         private String logMsg = "";
         private long startTime;
 
         @Override
         public void onAccuracyChanged(Sensor arg0, int arg1) {
-            Toast.makeText(appContext, "Accuracy changed to " + String.valueOf(arg1), Toast.LENGTH_LONG).show();
             logMsg = "#Accuracy changed to " + String.valueOf(arg1);
         }
 
         @Override
         public void onSensorChanged(SensorEvent event) {
-            long currentTime = uptimeMillis();
+            long currentTime = elapsedRealtime();
             String data = String.valueOf(event.values[0])
                     + " " + String.valueOf(event.values[1])
                     + " " + String.valueOf(event.values[2])
                     + " " + String.valueOf(currentTime - startTime)
                     + " " + logMsg +"\n";
             try {
-                fileStream.write(data.getBytes());
+                loggingSession.fileStream.write(data.getBytes());
             } catch (IOException e) {
                 e.printStackTrace();
             }
