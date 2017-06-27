@@ -8,12 +8,9 @@
 
     <uses-permission android:name="android.permission.BODY_SENSORS"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <uses-sdk android:minSdkVersion="14"
-        android:targetSdkVersion="25"/>
-
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -30,8 +27,8 @@
             </intent-filter>
         </activity>
 
-        <service android:name="me.connectedspace.accelerometer.AccelerometerLogService"
-                 >
+        <service android:name="me.connectedspace.accelerometer.LogService"
+                 android:stopWithTask="false">
         </service>
     </application>
 

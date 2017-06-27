@@ -1,63 +1,56 @@
 package me.connectedspace.accelerometer;
 
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.os.Environment;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Binder;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
-import android.util.Log;
-import android.content.Context;
-import android.content.Intent;
 import android.support.v4.app.NotificationCompat;
-import android.app.NotificationManager;
+import android.util.Log;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.text.SimpleDateFormat;
 import java.util.Locale;
 
 import static android.os.SystemClock.elapsedRealtime;
-import static android.os.SystemClock.sleep;
 import static android.os.SystemClock.uptimeMillis;
 import static android.support.v4.app.NotificationCompat.CATEGORY_SERVICE;
 import static android.support.v4.app.NotificationCompat.PRIORITY_MAX;
 import static java.lang.Math.max;
 import static java.lang.System.currentTimeMillis;
 
-public class AccelerometerLogService extends Service {
-    Context appContext;
+public class LogService extends Service {
     private Handler handler;
     SensorManager sensorManager;
     Sensor accelerometer;
     private NotificationManager nManager;
     private PowerManager powerManager;
     private PowerManager.WakeLock wakeLock;
-    private File dir;
     private static final String TAG = "serviceLog";
 
     @Override
     public void onCreate() {
         super.onCreate();
-        appContext=getApplicationContext();
         configuration = new Configuration();
         handler = new Handler(getMainLooper());
         logger = new Logger();
-        dir = new File(Environment.getExternalStorageDirectory(), "Accelerometer");
-        dir.mkdir();
 
         powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Accelerometer running.");
-        //// TODO: 4/10/2017 is ignoring battery optimization?
         nManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -82,7 +75,7 @@ public class AccelerometerLogService extends Service {
     private final IBinder binder = new accelBinder();
 
     class accelBinder extends Binder {
-        AccelerometerLogService getService() {return AccelerometerLogService.this;}
+        LogService getService() {return LogService.this;}
     }
 
     @Override
@@ -102,7 +95,7 @@ public class AccelerometerLogService extends Service {
     public boolean onUnbind(Intent intent) {
         Log.v(TAG, "onUnbind");
         if (!configuration.scheduled) {
-            AccelerometerLogService.this.stopSelf();
+            LogService.this.stopSelf();
         }
         return true;
     }
@@ -110,23 +103,30 @@ public class AccelerometerLogService extends Service {
     //logging behaviors
     Configuration configuration;
     private Logger logger;
-    private LoggingSession loggingSession = null;
+    private LoggingSession loggingSession;
 
     final class Configuration {
-        private Calendar calendar;
-        private SimpleDateFormat fileTimeFormat;
-        private SimpleDateFormat fileNameFormat;
+        private Calendar calendar = Calendar.getInstance();
+        private SimpleDateFormat fileTimeFormat = new SimpleDateFormat("E MMM dd HH:mm:ss.SSS zzz yyyy", Locale.US);
+        private SimpleDateFormat timeStampFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+        private SimpleDateFormat fileNameFormat = new SimpleDateFormat("HH-mm-ss MM" +
+                "M-dd", Locale.US);
+        private File dir = new File(Environment.getExternalStorageDirectory(), "Accelerometer");
         private long sleepTime; //updated by checkIfSlept
         private long bootTime;
-        private int interval;
+        private int interval = 10;
         private boolean scheduled;
+        private String macAddr;
 
         private Configuration() {
-            calendar = Calendar.getInstance();
-            fileTimeFormat = new SimpleDateFormat("E MMM dd HH:mm:ss.S zzz yyyy", Locale.US);
-            fileNameFormat = new SimpleDateFormat("MMM-dd HH-mm ss.S", Locale.US);
+            dir.mkdir();
             bootTime = (currentTimeMillis() - elapsedRealtime()
                     - elapsedRealtime() + currentTimeMillis()) / 2; //There can be a delay between calling one time and then the other.
+            sleepTime = (elapsedRealtime() - uptimeMillis()
+                    - uptimeMillis() + elapsedRealtime()) / 2;
+            WifiManager wifiMan = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            WifiInfo wifiInf = wifiMan.getConnectionInfo();
+            macAddr = wifiInf.getMacAddress().replaceAll(":", "");
         }
 
         void clear() {
@@ -141,11 +141,16 @@ public class AccelerometerLogService extends Service {
                 loggingSession = null;
             }
             nManager.cancel(1);
-            if (wakeLock.isHeld()) {wakeLock.release();}
+            try {
+                wakeLock.release();
+            } catch (Exception e){
+                //do nothing
+            }
         }
 
         void set(int hour, int minute, int second, int milli, int inter) {
             Log.v(TAG, "configuration set");
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Accelerometer running.");
             wakeLock.acquire();
             scheduled = true;
             calendar.set(Calendar.HOUR_OF_DAY, hour);
@@ -154,18 +159,6 @@ public class AccelerometerLogService extends Service {
             calendar.set(Calendar.MILLISECOND, milli);
             calendar.setTimeInMillis(max(currentTimeMillis(), configuration.getTimeInMillis()));
             interval = inter;
-            loggingSession = new LoggingSession(configuration.getTimeInMillis());
-            makeNotification(true, "Currently running.");
-            sleepTime = (elapsedRealtime() - uptimeMillis()
-                    - uptimeMillis() + elapsedRealtime()) / 2;
-        }
-
-        void set(long time, int inter) {
-            wakeLock.acquire();
-            scheduled = true;
-            calendar.setTimeInMillis(time);
-            interval = inter;
-            calendar.setTimeInMillis(max(currentTimeMillis(), configuration.getTimeInMillis()));
             loggingSession = new LoggingSession(configuration.getTimeInMillis());
             makeNotification(true, "Currently running.");
             sleepTime = (elapsedRealtime() - uptimeMillis()
@@ -186,7 +179,7 @@ public class AccelerometerLogService extends Service {
 
         long getTimeInMillis() {
             if (!scheduled) {
-                return 0;
+                throw new RuntimeException("Time is not set");
             }
             return calendar.getTimeInMillis();
         }
@@ -197,7 +190,7 @@ public class AccelerometerLogService extends Service {
             long delta = newSleepTime - sleepTime;
             Log.v(TAG, "checkIfSlept " + String.valueOf(delta));
             configuration.sleepTime = newSleepTime;
-            if (scheduled && delta > 0) {
+            if (scheduled && delta > 3) {
                 String logMsg = "#Device slept for " + String.valueOf(delta)
                         + "ms. Is battery optimization turned off for the app?";
                 makeNotification(false, logMsg);
@@ -207,9 +200,9 @@ public class AccelerometerLogService extends Service {
 
         private void makeNotification(boolean onGoing, String text) {
             Log.v(TAG, "makeNotification");
-            Intent intent = new Intent(appContext, MainActivity.class)
+            Intent intent = new Intent(getApplicationContext(), MainActivity.class)
                     .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            PendingIntent pendingIntent = PendingIntent.getActivity(appContext, 0,
+            PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0,
                     intent, 0);
             NotificationCompat.Builder builder =
                     new NotificationCompat.Builder(getApplicationContext())
@@ -238,16 +231,17 @@ public class AccelerometerLogService extends Service {
             //scheduledTime is in milliseconds since the epoch
             //setup file
             Date date = new Date(scheduledTime);
-            logFile = new File(dir, configuration.fileNameFormat.format(date) + ".txt");
-            boolean fileCreated = false;
-            try {fileCreated = logFile.createNewFile();}
-            catch (IOException e) {e.printStackTrace();}
-            if (fileCreated) {
-                try {fileStream = new FileOutputStream(logFile, true);}
-                catch (FileNotFoundException e) {e.printStackTrace();}
+            logFile = new File(configuration.dir, configuration.fileNameFormat.format(date) + " "
+                    + configuration.macAddr + ".txt");
+            try {
+                logFile.createNewFile();
+                fileStream = new FileOutputStream(logFile, true);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
+
             // add header to file
-            String header = "# Started @" + configuration.fileTimeFormat.format(date) + "\n";
+            String header = "# Started @" + configuration.fileTimeFormat.format(date) + "\r\n";
             try {
                 fileStream.write(header.getBytes());
             } catch (IOException e) {
@@ -260,7 +254,7 @@ public class AccelerometerLogService extends Service {
                 public void run() {
                     sensorManager.registerListener(logger, accelerometer, configuration.interval*1000);
                 }
-            }, scheduledTime - configuration.bootTime - configuration.sleepTime);
+            }, scheduledTime - configuration.bootTime - configuration.sleepTime - 1000); //start 1000 ms early
 
             Log.v(TAG, "Start logging session");
         }
@@ -299,7 +293,8 @@ public class AccelerometerLogService extends Service {
                     + " " + String.valueOf(event.values[1])
                     + " " + String.valueOf(event.values[2])
                     + " " + String.valueOf(currentTime - startTime)
-                    + " " + logMsg +"\n";
+                    + " " + configuration.timeStampFormat.format(new Date(currentTime + configuration.bootTime))
+                    + " " + logMsg +"\r\n";
             try {
                 loggingSession.fileStream.write(data.getBytes());
             } catch (IOException e) {
