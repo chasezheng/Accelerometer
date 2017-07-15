@@ -54,6 +54,7 @@ public class LogService extends Service {
         nManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        configuration.makeNotification(false, "Sensor range:\n" + String.valueOf(accelerometer.getMaximumRange()));
         Log.v(TAG, "onCreate");
         configuration.clear();
     }
@@ -178,9 +179,6 @@ public class LogService extends Service {
         boolean scheduled() {return scheduled;}
 
         long getTimeInMillis() {
-            if (!scheduled) {
-                throw new RuntimeException("Time is not set");
-            }
             return calendar.getTimeInMillis();
         }
 

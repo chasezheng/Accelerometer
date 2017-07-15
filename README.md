@@ -1,10 +1,6 @@
-## Solid Structure Mapping with Android Accelerometer:
-This is part of a project at UC Berkeley with Prof. Sitar to develop affordable and mobile tools to map solid structures.
-- Map solid layers by tracing the propogation of shockwaves
-- Detect echos of shockwave from sublayers with autocorrelation
-- Determine changes in solid composition by the dampening and speed of shockwaves
-- Extract signal by cross-correlation and stacking
-- Primary use case: map outdoor underground soil and rock stuctures
+## Mobile Geophone with Android:
+This is part of a project at UC Berkeley with Prof. Rector to develop affordable and portable replacement for geophones.
+ - Primary use case: capture and monitor mechanical waves transmitted through ground in outdoor environment, in order to monitor traffic or weather, and it can be used to map underground rock layers or soil composition.
 
 This is an application with a mainActivity that displays current sensor value and current time, together with a service that can log sensor values to files with as much precision as possible.
 

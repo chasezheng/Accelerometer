@@ -187,9 +187,9 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     currentTime.setText(dateFormatter.format(new Date(currentTimeMillis())));
                     if (serviceBound) {
-                        currentAccel.setText(String.valueOf(average(pastX))
-                                + "\n" + String.valueOf(average(pastY))
-                                + "\n" + String.valueOf(average(pastZ)));
+                        currentAccel.setText(String.valueOf(pastX[0])
+                                + "\n" + String.valueOf(pastY[0])
+                                + "\n" + String.valueOf(pastZ[0]));
                         averageInter.setText(String.valueOf(average(pastFreq)));
                         handler.postDelayed(this, 200);
                     } else {
